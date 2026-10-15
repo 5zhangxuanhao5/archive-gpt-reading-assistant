@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>图片预览</title>
+  <link rel="stylesheet" href="image-view.css">
+</head>
+<body>
+  <main class="image-stage" aria-label="图片预览">
+    <img id="image-viewer-image" alt="笔记图片" hidden>
+    <p id="image-viewer-status" role="status">正在打开图片…</p>
+  </main>
+  <button id="image-viewer-close" type="button" aria-label="关闭图片预览">
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+  </button>
+  <script src="image-view.js"></script>
+</body>
+</html>

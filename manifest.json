@@ -1,0 +1,79 @@
+{
+  "manifest_version": 3,
+  "name": "GPT阅读助手",
+  "version": "1.5.2",
+  "description": "聊天历史、当前回答目录、追问阅读返回，分框 Markdown 笔记；Edge 与 Chrome 共享笔记库并协同编辑。",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "unlimitedStorage",
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "打开 GPT阅读助手 笔记",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "128": "icons/128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "128": "icons/128.png"
+  },
+  "side_panel": {
+    "default_path": "notes.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "navigation.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "message-dom.js",
+        "history-reader.js",
+        "answer-outline.js",
+        "drag-bridge.js",
+        "panel.js",
+        "reading-position.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv4QnzZlEMx9K2xS3tjBDckExBw4FRVoGdPpPEidxwazhKqjiWqt/oQ9AEI92vpZ12D4D4N6YSGsiKYUcbnW5JZkfdAouliKlMHCNxetQF5FqavhYbdErXsIXyysDg5Ieq7lw+Wx3tOp8+wHwWK9rOqQCnD07zcWVizuCzg3KBc34UcQt6rqK56LMsKi9buN5ms2b1iOm7DjZYwfBk9u/g46UZHxQDK6kpwIu+1kR1FOZoDukEsgX08+jv5ZQYgmREGOKxHbO+o96cKqR4ySF8lXTVD/tGSL5LepK+itgEcLsjcbR+jb4yIkxRHvoN06ouZa+lYSJV/9jK6F2J3g2WwIDAQAB",
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "notes.html",
+        "image-view.html"
+      ],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}
