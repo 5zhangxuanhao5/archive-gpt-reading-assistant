@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GPT阅读助手",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "聊天历史、当前回答目录、追问阅读返回，分框 Markdown 笔记；Edge 与 Chrome 共享笔记库并协同编辑。",
   "minimum_chrome_version": "116",
   "permissions": [
@@ -9,6 +9,10 @@
     "storage",
     "unlimitedStorage",
     "nativeMessaging"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
   ],
   "background": {
     "service_worker": "background.js",

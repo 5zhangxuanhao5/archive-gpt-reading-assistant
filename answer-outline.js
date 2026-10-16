@@ -3,7 +3,7 @@
   if (globalThis.GPTReaderIndexWorker) return;
   const DOM = globalThis.YuejiDOM;
   const selector = 'h1,h2,h3,h4,h5,h6,[role="heading"][aria-level]';
-  let route = location.pathname + location.search, known = new Map(), retired = new Map();
+  const owners = new WeakMap();
   const clean = text => String(text || '').replace(/\s+/g, ' ').trim();
   const speaker = text => /^(?:chatgpt(?: said|\s*说|\s*說)?|assistant|助手|助理)\s*[:：]?$/i.test(clean(text));
   const excluded = node => node.closest('pre,code,nav,header,footer,button,[role="button"],aside,form,[contenteditable="true"],[hidden],[inert],[aria-hidden="true"]');
@@ -88,11 +88,13 @@
   }
   function snapshot() {
     DOM.scan();
-    const nextRoute = location.pathname + location.search;
-    if (route !== nextRoute) {retired = new Map(known);route = nextRoute;}
+    const route = location.pathname + location.search;
     const all = DOM.messages('assistant');
-    known = new Map(all.map(node => [node,{id:DOM.idOf(node),text:DOM.textOf(node)}]));
-    const messages = all.filter(node => !retired.has(node) || retired.get(node).id !== DOM.idOf(node) || retired.get(node).text !== DOM.textOf(node));
+    const messages = all.filter(node => {
+      const previous=owners.get(node),id=DOM.idOf(node),text=DOM.textOf(node);
+      if(previous && previous.route!==route && previous.id===id && previous.text===text)return false;
+      owners.set(node,{route,id,text});return true;
+    });
     const candidates = messages.map(node => ({node,box:visibleBounds(node)})).filter(item => item.box).sort((a,b) => a.box.distance - b.box.distance || b.box.visible - a.box.visible);
     const url = location.href.split('#')[0], message = candidates[0]?.node;
     if (!message) return {url,messageId:'',messageIndex:-1,title:'当前回答',headings:[],maxLevel:0};

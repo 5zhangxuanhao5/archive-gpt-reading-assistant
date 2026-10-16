@@ -1,6 +1,5 @@
 # Private source preservation snapshot
 
-Created on 2026-10-15 from the current local project source.
-Original project files and documentation are retained. Runtime credentials, user databases, generated caches and build outputs are excluded.
-This repository is a clean source snapshot; it does not replace the locally retained original files or any existing Git history.
-`SOURCE_MANIFEST.json` records source-file hashes for download verification.
+Updated 2026-10-16 to GPT阅读助手 1.5.3. Complete extension and native file component source are included. Existing archive Git history is retained. User notes, credentials, browser profiles, and caches are excluded. SOURCE_MANIFEST.json records SHA-256 for each source file.
+
+This update fixes live answer outline refresh after SPA navigation and isolates outlines by browser tab and window. The local release passed 105 isolated checks; the current Chrome account page outline was also observed working.

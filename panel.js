@@ -8,7 +8,7 @@
   const frame = document.createElement('iframe'); frame.title = '笔记与目录'; shadow.append(frame);
   host.hidden = true;
   let width = 380, dragging = false;
-  let mode = 'notes', windowId, revision = 0, imageHost, imageFrame, frameReady=false;
+  let mode = 'notes', windowId, readerTabId, revision = 0, imageHost, imageFrame, frameReady=false;
   const layoutStyles = new Map(), layoutMetrics = new Map();
   const composerSelector = '#prompt-textarea,form textarea,form [contenteditable="true"],[role="textbox"][contenteditable="true"]';
   const clamp = value => Math.max(Math.min(280,innerWidth * .75),Math.min(value,Math.max(280,Math.min(680,innerWidth - 300))));
@@ -82,12 +82,12 @@
     reserveChatSpace();
     const dock = document.getElementById('yueji-dock'); if (dock) dock.style.right = width + 6 + 'px';
     if(imageHost)imageHost.style.right=width+'px';
-    post({type:'HOST_VIEW',visible:!document.hidden,mode,windowId});
+    post({type:'HOST_VIEW',visible:!document.hidden,mode,windowId,readerTabId});
   }
   function mount() { const body=document.body || document.documentElement;if (body && !host.isConnected)body.append(host); }
   function open(message) {
-    mount(); mode=message.mode || 'notes'; windowId=message.windowId; host.hidden=false;
-    if (!frame.src) frame.src=chrome.runtime.getURL('notes.html')+'?surface=embedded&windowId='+windowId;
+    mount(); mode=message.mode || 'notes'; windowId=message.windowId; readerTabId=message.readerTabId;host.hidden=false;
+    if (!frame.src) frame.src=chrome.runtime.getURL('notes.html')+'?'+new URLSearchParams({surface:'embedded',windowId,readerTabId});
     layout(); post({type:'HOST_VIEW',visible:!document.hidden,mode,windowId});
   }
   function close() {
@@ -117,7 +117,7 @@
     if(event.data?.type==='READER_PANEL_READY'){frameReady=true;layout();post({type:'HOST_VIEW',visible:!host.hidden&&!document.hidden,mode,windowId});}
   });
   chrome.runtime.onMessage.addListener((message,sender,reply)=>{
-    if(message.type==='INLINE_CONTEXT'){windowId=message.windowId;layout();reply({ok:true});return;}
+    if(message.type==='INLINE_CONTEXT'){windowId=message.windowId;readerTabId=message.readerTabId;layout();reply({ok:true});return;}
     if(message.type==='OPEN_INLINE_IMAGE'){openImage(message);reply({ok:true});return;}
     if(message.type!=='OPEN_INLINE_NOTES')return;
     open(message);reply({ok:true});

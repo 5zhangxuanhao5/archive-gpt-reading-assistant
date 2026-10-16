@@ -378,7 +378,7 @@ async function execute(message) {
 const transaction = message => withSharedStore(() => execute(message));
 chrome.sidePanel.setPanelBehavior({openPanelOnActionClick: false}).catch(console.error);
 async function openInline(tab,mode='notes') {
-  await chrome.tabs.sendMessage(tab.id,{type:'OPEN_INLINE_NOTES',mode,windowId:tab.windowId});
+  await chrome.tabs.sendMessage(tab.id,{type:'OPEN_INLINE_NOTES',mode,windowId:tab.windowId,readerTabId:tab.id});
   await chrome.sidePanel.close?.({windowId:tab.windowId}).catch(()=>{});
 }
 chrome.action.onClicked.addListener(tab=>{
@@ -416,16 +416,17 @@ function pruneImageDrags(retain) {
     bytes -= imageDrags.get(candidate).bytes || 0; imageDrags.delete(candidate);
   }
 }
-const answerOutlines = new Map(), outlineModes = new Map();
-const outlineReady = chrome.storage.session.get(['answerOutlineTabs','answerOutlineModes']).then(data => {
+const answerOutlines = new Map(), outlineModes = new Map(), readerModes = new Map(), outlineRequests = new Map();
+const outlineReady = chrome.storage.session.get(['answerOutlineTabs','answerOutlineModes','answerReaderModes']).then(data => {
   for (const [key,value] of Object.entries(data.answerOutlineTabs || {})) answerOutlines.set(Number(key),value);
   for (const [key,value] of Object.entries(data.answerOutlineModes || {})) outlineModes.set(Number(key),value);
+  for (const [key,value] of Object.entries(data.answerReaderModes || {})) readerModes.set(Number(key),value);
 }).catch(() => {});
 function persistOutlines() {
-  return chrome.storage.session.set({answerOutlineTabs:Object.fromEntries(answerOutlines),answerOutlineModes:Object.fromEntries(outlineModes)}).catch(() => {});
+  return chrome.storage.session.set({answerOutlineTabs:Object.fromEntries(answerOutlines),answerOutlineModes:Object.fromEntries(outlineModes),answerReaderModes:Object.fromEntries(readerModes)}).catch(() => {});
 }
-function outlineBroadcast(windowId, message) {
-  for (const panel of panels.values()) if (panel.windowId === windowId) try { panel.port.postMessage(message); } catch {}
+function outlineBroadcast(windowId, message, tabId, active = true) {
+  for (const panel of panels.values()) if (panel.windowId === windowId && (panel.surface === 'embedded' ? panel.readerTabId === tabId : active)) try { panel.port.postMessage({...message,readerTabId:tabId}); } catch {}
 }
 function validOutline(input, expectedUrl) {
   if (!input || typeof input.url !== 'string' || !Array.isArray(input.headings)) throw new Error('目录数据无效');
@@ -441,18 +442,41 @@ function validOutline(input, expectedUrl) {
   });
   return {url:url.href,messageId:String(input.messageId||'').slice(0,300),messageIndex:input.messageIndex,title:String(input.title||'').slice(0,500),headings,maxLevel:headings.reduce((max,h)=>Math.max(max,h.level),0)};
 }
-async function currentOutline(windowId) {
+const outlineURL = value => { try { const url=new URL(value);url.hash='';return url.href; } catch { return ''; } };
+async function acceptOutline(tabId, input, ticket) {
   await outlineReady;
-  const mode=outlineModes.get(windowId) || {mode:'notes'};
-  const active=await chrome.tabs.query({windowId,active:true});
-  const activeOutline=active[0] && answerOutlines.get(active[0].id);
-  const stored=answerOutlines.get(mode.tabId);
-  const fallback=[...answerOutlines.values()].filter(item=>item.windowId===windowId).at(-1);
-  return {mode:mode.mode,outline:(activeOutline || stored || fallback)?.outline || null};
+  const tab=await chrome.tabs.get(tabId),outline=validOutline(input,tab.url);
+  if(outlineRequests.get(tabId)!==ticket)return null;
+  const previous=answerOutlines.get(tabId);
+  answerOutlines.set(tabId,{windowId:tab.windowId,outline});
+  if(JSON.stringify(previous?.outline)!==JSON.stringify(outline) || previous?.windowId!==tab.windowId){
+    persistOutlines();
+    // Each embedded reader owns its outline, even while another tab is active.
+    for(const panel of panels.values())if(panel.surface==='embedded' && panel.readerTabId===tabId)panel.windowId=tab.windowId;
+    if(tab.active)outlineBroadcast(tab.windowId,{type:'ANSWER_OUTLINE_CHANGED',outline},tabId);
+    else for(const panel of panels.values())if(panel.surface==='embedded' && panel.readerTabId===tabId)try{panel.port.postMessage({type:'ANSWER_OUTLINE_CHANGED',readerTabId:tabId,outline});}catch{}
+  }
+  return {tab,outline};
+}
+async function refreshOutline(tabId) {
+  const ticket=(outlineRequests.get(tabId)||0)+1;outlineRequests.set(tabId,ticket);
+  try {
+    const result=await chrome.tabs.sendMessage(tabId,{type:'REQUEST_ANSWER_OUTLINE'});
+    if(result?.ok && result.outline)await acceptOutline(tabId,result.outline,ticket);
+  } catch {}
+}
+async function currentOutline(windowId, readerTabId) {
+  await outlineReady;
+  const tab=Number.isInteger(readerTabId) ? await chrome.tabs.get(readerTabId).catch(()=>null) : (await chrome.tabs.query({windowId,active:true}))[0];
+  const mode=Number.isInteger(readerTabId) ? readerModes.get(readerTabId) || 'notes' : outlineModes.get(windowId)?.mode || 'notes';
+  const stored=tab && answerOutlines.get(tab.id);
+  const outline=stored && tab && stored.windowId===tab.windowId && outlineURL(stored.outline?.url)===outlineURL(tab.url) ? stored.outline : null;
+  if(tab)refreshOutline(tab.id);
+  return {mode,outline,readerTabId:tab?.id};
 }
 async function setSurfaceMode(windowId, mode, tabId, outline) {
-  await outlineReady; outlineModes.set(windowId,{mode,tabId}); await persistOutlines();
-  outlineBroadcast(windowId,{type:'SURFACE_MODE',mode,...(outline?{outline}: {})});
+  await outlineReady; outlineModes.set(windowId,{mode,tabId});if(Number.isInteger(tabId))readerModes.set(tabId,mode);await persistOutlines();
+  outlineBroadcast(windowId,{type:'SURFACE_MODE',mode,...(outline?{outline}: {})},tabId);
 }
 
 function targetFor(windowId) { return [...panels.values()].filter(p => p.visible && (p.surface !== 'sidepanel' || sidepanelOpen.get(p.windowId) !== false) && p.id && p.windowId === windowId).sort((a, b) => b.at - a.at)[0]; }
@@ -464,7 +488,7 @@ chrome.runtime.onConnect.addListener(port => {
   if (port.name !== 'yueji-notes' || !port.sender?.url?.startsWith(chrome.runtime.getURL('notes.html'))) return;
   port.onMessage.addListener(data => {
     const previous = panels.get(port);
-    panels.set(port, {id: data.id || '', title: String(data.title || ''), windowId: data.windowId, port, anchor: data.anchor, surface: data.surface === 'sidepanel' ? 'sidepanel' : 'tab', visible: !!data.visible, at: Date.now()});
+    panels.set(port, {id: data.id || '', title: String(data.title || ''), windowId: data.windowId, port, anchor: data.anchor, readerTabId:port.sender.tab?.id ?? data.readerTabId, surface: ['sidepanel','embedded'].includes(data.surface) ? data.surface : 'tab', visible: !!data.visible, at: Date.now()});
     if (previous && previous.windowId !== data.windowId) broadcastTarget(previous.windowId);
     broadcastTarget(data.windowId);
   });
@@ -472,9 +496,25 @@ chrome.runtime.onConnect.addListener(port => {
 });
 chrome.sidePanel.onOpened?.addListener(info => { if (info.path === 'notes.html') { sidepanelOpen.set(info.windowId, true); broadcastTarget(info.windowId); } });
 chrome.sidePanel.onClosed?.addListener(info => { sidepanelOpen.set(info.windowId, false); broadcastTarget(info.windowId); });
-chrome.tabs.onRemoved.addListener(tabId => { readers.delete(tabId); answerOutlines.delete(tabId); persistOutlines(); });
-chrome.tabs.onAttached.addListener((tabId,info)=>{chrome.tabs.sendMessage(tabId,{type:'INLINE_CONTEXT',windowId:info.newWindowId}).catch(()=>{});});
-chrome.tabs.onActivated.addListener(info => { outlineReady.then(async () => { if (outlineModes.get(info.windowId)?.mode === 'outline') outlineBroadcast(info.windowId,{type:'ANSWER_OUTLINE_CHANGED',...(await currentOutline(info.windowId))}); }).catch(()=>{}); });
+chrome.tabs.onRemoved.addListener(tabId => { readers.delete(tabId);answerOutlines.delete(tabId);readerModes.delete(tabId);outlineRequests.delete(tabId);persistOutlines(); });
+chrome.tabs.onAttached.addListener((tabId,info)=>{
+  if(readers.has(tabId))readers.get(tabId).windowId=info.newWindowId;
+  if(answerOutlines.has(tabId))answerOutlines.get(tabId).windowId=info.newWindowId;
+  for(const panel of panels.values())if(panel.readerTabId===tabId)panel.windowId=info.newWindowId;
+  chrome.tabs.sendMessage(tabId,{type:'INLINE_CONTEXT',windowId:info.newWindowId,readerTabId:tabId}).catch(()=>{});refreshOutline(tabId);persistOutlines();
+});
+async function activateOutline(windowId,tabId) {
+  const result=await currentOutline(windowId,tabId);
+  const tab=await chrome.tabs.get(tabId).catch(()=>null);
+  outlineBroadcast(windowId,{type:'ANSWER_OUTLINE_CHANGED',outline:result.outline},tabId,!!tab?.active);
+}
+chrome.tabs.onActivated.addListener(info=>{activateOutline(info.windowId,info.tabId).catch(()=>{});});
+chrome.tabs.onUpdated.addListener((tabId,change,tab)=>{
+  if(!change.url && change.status!=='complete')return;
+  if(change.url){answerOutlines.delete(tabId);outlineRequests.set(tabId,(outlineRequests.get(tabId)||0)+1);persistOutlines();outlineBroadcast(tab.windowId,{type:'ANSWER_OUTLINE_CHANGED',outline:null},tabId,tab.active);}
+  refreshOutline(tabId);
+});
+chrome.windows.onFocusChanged.addListener(windowId=>{if(windowId<0)return;chrome.tabs.query({windowId,active:true}).then(tabs=>tabs[0] && activateOutline(windowId,tabs[0].id)).catch(()=>{});});
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (sender.id !== chrome.runtime.id) return;
   if (['READING_POSITION_GET','READING_POSITION_SET'].includes(message.type) && sender.tab && /^https:\/\/(chatgpt\.com|chat\.openai\.com)\//.test(sender.url || '')) {
@@ -517,15 +557,14 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     return true;
   }
   if (['ANSWER_OUTLINE','OPEN_ANSWER_OUTLINE'].includes(message.type) && sender.tab && /^https:\/\/(chatgpt\.com|chat\.openai\.com)\//.test(sender.url || '')) {
-    let outline;
-    try { outline=validOutline(message.outline,sender.url); } catch (error) { reply({error:error.message}); return; }
+    const ticket=(outlineRequests.get(sender.tab.id)||0)+1;outlineRequests.set(sender.tab.id,ticket);
     (async () => {
-      await outlineReady;
-      const previous=answerOutlines.get(sender.tab.id);
-      const changed=JSON.stringify(previous?.outline)!==JSON.stringify(outline);
-      answerOutlines.set(sender.tab.id,{windowId:sender.tab.windowId,outline});
-      if (changed) { await persistOutlines(); if (sender.tab.active) outlineBroadcast(sender.tab.windowId,{type:'ANSWER_OUTLINE_CHANGED',outline}); }
-      if (message.type==='OPEN_ANSWER_OUTLINE') { await setSurfaceMode(sender.tab.windowId,'outline',sender.tab.id,outline); await openInline(sender.tab,'outline'); }
+      let accepted=await acceptOutline(sender.tab.id,message.outline,ticket);
+      if (message.type==='OPEN_ANSWER_OUTLINE') {
+        // A simultaneous focus refresh must not swallow an explicit button click.
+        if(!accepted){const tab=await chrome.tabs.get(sender.tab.id);accepted={tab,outline:validOutline(message.outline,tab.url)};}
+        await setSurfaceMode(accepted.tab.windowId,'outline',accepted.tab.id,accepted.outline);await openInline(accepted.tab,'outline');
+      }
       reply({ok:true});
     })().catch(error=>reply({error:error.message}));
     return true;
@@ -533,7 +572,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (message.type==='GET_ANSWER_OUTLINE' && sender.url?.startsWith(chrome.runtime.getURL(''))) {
     const windowId=Number.isInteger(message.windowId) ? message.windowId : sender.tab?.windowId;
     if (!Number.isInteger(windowId)) { reply({error:'窗口无效'}); return; }
-    currentOutline(windowId).then(result=>reply({ok:true,...result})).catch(error=>reply({error:error.message})); return true;
+    currentOutline(windowId,message.embedded ? sender.tab?.id ?? message.readerTabId : undefined).then(result=>reply({ok:true,...result})).catch(error=>reply({error:error.message})); return true;
   }
   if (['REGISTER_READER', 'GET_NOTE_TARGET', 'INSERT_SELECTED_QUOTE'].includes(message.type) && sender.tab && /^https:\/\/(chatgpt\.com|chat\.openai\.com)\//.test(sender.url || '')) {
     let pageUrl;

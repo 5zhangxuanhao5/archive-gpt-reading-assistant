@@ -15,7 +15,7 @@ let treeFingerprint = '', tabsFingerprint = '', sharedRevision = '', revisionChe
 const embedded = new URL(location.href).searchParams.get('surface') === 'embedded' && parent !== window;
 let hostVisible = !embedded, readingIntent = false, readingSelected = false, readingTimer, readingRevision = 0;
 const quoteAnchors = new Map();
-let panelPort, windowId, surface = 'tab', previewMode = false, activeBlockId = '', renderedNote = '', outlineMode = false;
+let panelPort, windowId, readerTabId, surface = 'tab', previewMode = false, activeBlockId = '', renderedNote = '', outlineMode = false;
 let answerOutline = null, outlineDepth = 1, outlineKey = '';
 export const blockEditors = new Map();
 const blockCards = new Map(), imageCache = new Map(), imageLoads = new Map();
@@ -58,11 +58,12 @@ function publishTarget() {
   const index=note ? visibleBlocks(note).findIndex(block=>block.id===activeBlockId) : -1;
   if(index>=0 && emptyBlock(visibleBlocks(note)[index])){const blocks=visibleBlocks(note);anchor={blockId:activeBlockId,empty:true,index,previousId:blocks[index-1]?.id || '',nextId:blocks[index+1]?.id || ''};quoteAnchors.set(active,anchor);}
   else if(!activeBlockId && quoteAnchors.has(active))anchor=quoteAnchors.get(active);
-  try { panelPort?.postMessage({anchor,id:note?.id || '', title:note?.title || '', windowId, surface, visible:!outlineMode && (embedded ? hostVisible && !document.hidden : surface === 'sidepanel' || !document.hidden)}); } catch {}
+  try { panelPort?.postMessage({anchor,id:note?.id || '', title:note?.title || '', windowId, readerTabId, surface, visible:!outlineMode && (embedded ? hostVisible && !document.hidden : surface === 'sidepanel' || !document.hidden)}); } catch {}
 }
 function connectPanel() {
   panelPort = chrome.runtime.connect({name:'yueji-notes'});
   panelPort.onMessage.addListener(message => {
+    if(embedded && Number.isInteger(message.readerTabId) && message.readerTabId!==readerTabId)return;
     if (message.type === 'SURFACE_MODE') { setSurface(message.mode, message.outline); return; }
     if (message.type === 'ANSWER_OUTLINE_CHANGED') { updateOutline(message.outline); return; }
     if (message.type !== 'QUOTE_INSERTED') return;
@@ -72,11 +73,12 @@ function connectPanel() {
   });
   panelPort.onDisconnect.addListener(() => { panelPort = null; setTimeout(connectPanel,1200); }); publishTarget();
 }
-Promise.all([chrome.windows.getCurrent(),chrome.tabs.getCurrent()]).then(async ([currentWindow,tab]) => { windowId = embedded ? Number(new URL(location.href).searchParams.get('windowId')) || currentWindow.id : currentWindow.id; surface = embedded ? 'embedded' : tab ? 'tab' : 'sidepanel'; connectPanel(); try { const result = await api({type:'GET_ANSWER_OUTLINE',windowId}); setSurface(result.mode || 'notes',result.outline); } catch {} });
+Promise.all([chrome.windows.getCurrent(),chrome.tabs.getCurrent()]).then(async ([currentWindow,tab]) => { windowId ??= embedded ? Number(new URL(location.href).searchParams.get('windowId')) || currentWindow.id : currentWindow.id;readerTabId ??= embedded ? tab?.id ?? Number(new URL(location.href).searchParams.get('readerTabId')) : undefined; surface = embedded ? 'embedded' : tab ? 'tab' : 'sidepanel'; connectPanel(); try { const result = await api({type:'GET_ANSWER_OUTLINE',windowId,readerTabId,embedded}); setSurface(result.mode || 'notes',result.outline); } catch {} });
 window.addEventListener('message',event=>{
   if(!embedded || event.source!==parent || !['https://chatgpt.com','https://chat.openai.com'].includes(event.origin))return;
   if(event.data?.type==='HOST_VIEW'){
     if(Number.isInteger(event.data.windowId))windowId=event.data.windowId;
+    if(Number.isInteger(event.data.readerTabId))readerTabId=event.data.readerTabId;
     hostVisible=!!event.data.visible;
     if(event.data.mode && outlineMode!==(event.data.mode==='outline'))setSurface(event.data.mode);
     if(!hostVisible && active){readingIntent=false;readingSelected=false;discardEmptyBlocks(active);}

@@ -4,7 +4,7 @@
   if (document.getElementById('yueji-dock')) return;
   const host = document.createElement('div'); host.id = 'yueji-dock';
   let domObserver = null, observedRoot = null;
-  const observerOptions = {subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'hidden', 'inert', 'aria-hidden', 'data-message-author-role', 'data-turn-id', 'data-message-id']};
+  const observerOptions = {subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'style', 'role', 'aria-level', 'hidden', 'inert', 'aria-hidden', 'data-message-author-role', 'data-turn-id', 'data-message-id']};
   function ensureMounted() {
     const root = document.documentElement;
     if (domObserver && root && observedRoot !== root) { domObserver.disconnect(); domObserver.observe(root, observerOptions); observedRoot = root; }
@@ -50,12 +50,14 @@
   function setPosition(position){bookmark=position;++positionLoad;followupIntent=null;pending=null;showPosition();send({type:'READING_POSITION_SET',url:position.chat,position}).then(result=>{if(!result?.ok)throw new Error(result?.error || '保存失败');}).catch(()=>toast('定位暂存在此页面，后台保存暂未完成'));}
   const hasSelection=()=>!!getSelection()?.toString().trim();
   const interactive=event=>event.composedPath().includes(host) || event.composedPath().some(node=>node?.id==='gpt-reader-panel' || node?.id==='gpt-reader-image') || event.target.closest?.('a,button,[role=button],input,textarea,select,form,[contenteditable=true],nav,aside,header,footer,[role=dialog],[role=menu],summary,label');
-  let answerOutline = null, answerSignature = '', answerRefreshTimer;
+  let answerOutline = null, answerSignature = '', answerRefreshTimer, answerPending = '', answerRevision = 0;
   function publishAnswerOutline(force = false) {
     if (!Answer) return;
     const outline = Answer.snapshot(), next = JSON.stringify(outline); answerOutline = outline;
-    if (!force && next === answerSignature) { positionDock(); return; }
-    answerSignature = next; positionDock(); send({type: 'ANSWER_OUTLINE', outline}).catch(() => {});
+    positionDock();
+    if (!force && (next === answerSignature || next === answerPending)) return;
+    const revision=++answerRevision;answerPending=next;
+    send({type: 'ANSWER_OUTLINE', outline}).then(result=>{if(revision===answerRevision && result?.ok)answerSignature=next;}).catch(() => {}).finally(()=>{if(revision===answerRevision)answerPending='';});
   }
   const userNodes = () => DOM.messages('user');
   const assistantNodes = () => DOM.messages('assistant');
@@ -259,7 +261,7 @@
     if (message.type === 'OUTLINE_HISTORY') receiveHistory(message);
     if (message.type === 'NOTE_TARGET') { noteTarget = message.target; if (!noteTarget) selectionButton.hidden = true; else if (selectedQuote) captureQuoteSelection(); }
     if (message.type === 'JUMP_TO_SOURCE') jumpToSource(message.source);
-    if (message.type === 'REQUEST_ANSWER_OUTLINE') { publishAnswerOutline(true); reply({ok: true, outline: answerOutline}); }
+    if (message.type === 'REQUEST_ANSWER_OUTLINE') { answerOutline=Answer.snapshot();reply({ok: true, outline: answerOutline}); }
     if (['OUTLINE_HISTORY', 'NOTE_TARGET', 'JUMP_TO_SOURCE'].includes(message.type)) reply({ok: true});
   });
   function restore(saved) { const restored=Position.restore(saved);if(restored)updatePositionMark();return restored; }
@@ -329,7 +331,7 @@
   $('.dock-handle').addEventListener('mouseenter', () => { positionDock(); });
   $('#answer-outline-toggle').onclick = () => {
     $('.outline').hidden = true; $('.tooltip').hidden = true; $('#outline-toggle').classList.remove('active');
-    publishAnswerOutline();
+    answerOutline=Answer.snapshot();
     send({type: 'OPEN_ANSWER_OUTLINE', outline: answerOutline}).then(result => { if (result?.error) toast(result.error); }).catch(() => toast('插件刚刚更新，请刷新网页'));
   };
   document.addEventListener('scroll', () => {
@@ -337,6 +339,8 @@
     if (!answerRefreshTimer) answerRefreshTimer = setTimeout(() => { answerRefreshTimer = null; publishAnswerOutline(); }, 90);
   }, {capture: true, passive: true});
   window.addEventListener('resize', () => {publishAnswerOutline();updatePositionMark();});
+  window.addEventListener('focus',()=>publishAnswerOutline(true));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)publishAnswerOutline(true);});
   $('#notes').onclick = () => send({type: 'OPEN_NOTES'}).then(result => { if (result?.error) toast('请点击浏览器工具栏的GPT阅读助手图标打开笔记'); }).catch(() => toast('插件刚刚更新，请刷新网页'));
   let outlineLeave;
   const openOutline = () => { clearTimeout(outlineLeave); $('.outline').hidden = false; $('#outline-toggle').classList.add('active'); refresh(); render(); requestHistory(); };
@@ -361,7 +365,7 @@
   ensureMounted();
   window.addEventListener('gpt-reading-route', refresh);
   window.addEventListener('popstate', refresh); window.addEventListener('pageshow', refresh);
-  setInterval(() => { if (ensureMounted() || route !== currentRoute() || !$('.outline').hidden) refresh(); }, 250); refresh();
+  setInterval(() => { if (ensureMounted() || route !== currentRoute() || !$('.outline').hidden) refresh();else if(!document.hidden)publishAnswerOutline(); }, 250); refresh();
   setInterval(() => {
     if (historyState.loading && historyRequested === historyURL()) send({type: 'OUTLINE_STATUS'}).then(result => { if (result?.ok) receiveHistory(result); }).catch(() => {});
   }, 10000);
