@@ -1,14 +1,12 @@
 {
   "manifest_version": 3,
   "name": "GPT阅读助手",
-  "version": "1.5.3",
-  "description": "聊天历史、当前回答目录、追问阅读返回，分框 Markdown 笔记；Edge 与 Chrome 共享笔记库并协同编辑。",
+  "version": "1.6.0",
+  "description": "开箱即用的 ChatGPT 阅读工具：回答目录、提问记录、阅读返回和自动保存的 Markdown 笔记。无需额外组件。",
   "minimum_chrome_version": "116",
   "permissions": [
-    "sidePanel",
     "storage",
-    "unlimitedStorage",
-    "nativeMessaging"
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://chatgpt.com/*",
@@ -30,9 +28,6 @@
     "16": "icons/16.png",
     "32": "icons/32.png",
     "128": "icons/128.png"
-  },
-  "side_panel": {
-    "default_path": "notes.html"
   },
   "content_scripts": [
     {
@@ -66,7 +61,7 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'"
   },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv4QnzZlEMx9K2xS3tjBDckExBw4FRVoGdPpPEidxwazhKqjiWqt/oQ9AEI92vpZ12D4D4N6YSGsiKYUcbnW5JZkfdAouliKlMHCNxetQF5FqavhYbdErXsIXyysDg5Ieq7lw+Wx3tOp8+wHwWK9rOqQCnD07zcWVizuCzg3KBc34UcQt6rqK56LMsKi9buN5ms2b1iOm7DjZYwfBk9u/g46UZHxQDK6kpwIu+1kR1FOZoDukEsgX08+jv5ZQYgmREGOKxHbO+o96cKqR4ySF8lXTVD/tGSL5LepK+itgEcLsjcbR+jb4yIkxRHvoN06ouZa+lYSJV/9jK6F2J3g2WwIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAusH8nNZPk7serPCsEus6TbIiARld55scRITr2hGqZHp/U71p4r5prQTcqZBIc5OsIAxAcJXJneognYEFSN+PChCn9CQW02zeIsQgOW/FAs9XuCBjfLewxvlzM8cPenydHP0BL+nvFFDKxS+5sgSSVrCFhwLEQKz4ETuCk0+4H6TrFR6yqH3XdQbVoOsN67/ZCONqT4JqjPkZn+VjvNnXjaGLS/uGBiGAlgLZSQV5U2ziwJHNXw92vWPp8Wml6Dal5mHbIY9kmeopxl9IXSfoOf4CD7dVFGAp2SOUNoHdT8XoC4hbtXiniGh/XnJeQK/UyKvpjz+dxH8UyaBmmwX3fQIDAQAB",
   "web_accessible_resources": [
     {
       "resources": [

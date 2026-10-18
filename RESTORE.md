@@ -1,7 +1,9 @@
-# GPT阅读助手恢复开发
+# 恢复开发和用户笔记
 
-根目录是1.5.2的完整Chrome/Edge扩展，可直接作为未打包扩展加载；vendor包含可用的编辑器/KaTeX资源。修改编辑器时进入development，准备Node/npm，执行 `npm ci`、`node build.mjs`；package-lock.json固定依赖。没有node_modules缓存不影响取回源代码，首次重建需下载公开npm依赖。
+源码：克隆本仓库，检出 1.6.0 提交或标签。根目录直接包含 manifest.json，可加载为未打包的浏览器扩展。成品运行不需 npm 或 Python。
 
-native/yueji_host.py及安装/卸载脚本使用Python3；在新电脑需要由本人重新运行native安装程序登记NativeMessaging，并重新授权浏览器扩展。固定扩展公钥保留，不能把用户生成的私钥或账号令牌放入项目。
+用户笔记：在原浏览器设置里导出完整 JSON 备份，在新浏览器同版本插件的设置里导入。导入保留原数据并添加副本。源代码仓库不包含用户笔记、浏览器配置或账号数据。
 
-个人笔记数据库、选定目录、浏览器历史缓存/登录状态不在源码包内，应单独保管。补充开发测试和历史说明位于archive-development-projects的projects/reading-assistant-development-tools与reading-assistant-extra-notes，主源继续开发不依赖旧历史目录。
+校验源码：`python3 verify-source.py`。这个命令仅用于开发者核验，不是安装或使用要求。
+
+不同浏览器分别保存数据，没有本地组件或后台共享进程。卸载扩展前请导出备份。

@@ -6,9 +6,9 @@ from pathlib import Path, PurePosixPath
 import sys
 
 root=Path(__file__).resolve().parent
-manifest=root/'RECOVERY_MANIFEST.json'
+manifest=root/'SOURCE_MANIFEST.json'
 if not manifest.is_file():
-    raise SystemExit('RECOVERY_MANIFEST.json is missing. Use the full recovery source package.')
+    raise SystemExit('SOURCE_MANIFEST.json is missing. Use the complete source package.')
 data=json.loads(manifest.read_text(encoding='utf-8'))
 failed=[]
 for item in data['files']:

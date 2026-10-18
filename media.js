@@ -1,5 +1,5 @@
 import {get, put} from './db.js';
-import {rootHandle, nativeRequest} from './native-files.js';
+import {rootHandle} from './folder-files.js';
 const MAX_IMAGE = 20 * 1024 * 1024;
 const synced = new Map();
 export function resetImageSync() { synced.clear(); }
@@ -46,13 +46,7 @@ async function readAsset(reference) {
   const {imageId, src, match} = reference; if (!src) throw new Error('图片文件路径缺失');
   const root = await rootHandle(); if (!root || await root.queryPermission({mode:'readwrite'}) !== 'granted') throw new Error('图片尚未在浏览器中备份，请连接原笔记文件夹');
   let bytes;
-  if (await get('nativeMode')) {
-    const chunks = []; let offset = 0;
-    do { const result = await nativeRequest({op:'READ_ASSET',path:src,offset}); chunks.push(Uint8Array.from(atob(result.data), ch=>ch.charCodeAt(0))); offset=result.next; if (offset>=result.size) break; } while (true);
-    const size = chunks.reduce((sum,b)=>sum+b.length,0); bytes=new Uint8Array(size); let at=0; for (const part of chunks) { bytes.set(part,at); at+=part.length; }
-  } else {
-    const file = await (await fileAt(root,src)).getFile(); if (file.size > MAX_IMAGE) throw new Error('每张图片不能超过 20 MB'); bytes = new Uint8Array(await file.arrayBuffer());
-  }
+  const file = await (await fileAt(root,src)).getFile(); if (file.size > MAX_IMAGE) throw new Error('每张图片不能超过 20 MB'); bytes = new Uint8Array(await file.arrayBuffer());
   const mime = typeForExtension(match[2].toLowerCase()); validateImage(bytes,mime);
   const asset = {imageId,src,mime,bytes}; await put('asset:'+imageId,asset); return asset;
 }
@@ -61,30 +55,25 @@ export async function imageAsset(imageId, src) {
   if (cached && (!src || cached.src === src)) return cached;
   return readAsset(reference);
 }
-export async function storeImage(dataURL, alt) {
+export function prepareImage(dataURL, alt) {
   const {bytes,mime}=decodeDataURL(dataURL); const imageId=crypto.randomUUID(); const src='.gpt-reader-assets/'+imageId+'.'+types[mime];
-  await put('asset:'+imageId,{imageId,src,mime,bytes,alt:String(alt||'').slice(0,1000)});
-  return {imageId,src};
+  return {imageId,src,mime,bytes,alt:String(alt||'').slice(0,1000)};
 }
+export async function storeImage(dataURL, alt) { const asset=prepareImage(dataURL,alt); await put('asset:'+asset.imageId,asset); return {imageId:asset.imageId,src:asset.src}; }
 export async function getImage(imageId,src) {
   const asset=await imageAsset(imageId,src); return {dataURL:'data:'+asset.mime+';base64,'+base64(asset.bytes)};
 }
 export async function syncImages(note) {
   const images=(note.blocks||[]).filter(block=>block.type==='image'); if (!images.length) return;
   const root=await rootHandle(); if (!root) throw new Error('尚未设置文件夹；已保存在浏览器本地');
-  const native=await get('nativeMode');
   for (const block of images) {
     assetReference(block.imageId,block.src);
     let current;
-    try { current = native ? await nativeRequest({op:'FILE',path:block.src}) : await (await fileAt(root,block.src)).getFile(); }
+    try { current = await (await fileAt(root,block.src)).getFile(); }
     catch (error) { if (error.name!=='NotFoundError') throw error; }
     const stamp=current ? current.lastModified+':'+current.size : '';
     if (stamp && synced.get(block.imageId)===stamp) continue;
     const asset=await imageAsset(block.imageId,block.src);
-    if (native) {
-      await nativeRequest({op:'WRITE_ASSET',path:asset.src,data:base64(asset.bytes)});
-      current=await nativeRequest({op:'FILE',path:asset.src});
-    } else {
       if (current) {
         const existing=new Uint8Array(await current.arrayBuffer());
         if (existing.length!==asset.bytes.length || existing.some((byte,i)=>byte!==asset.bytes[i])) throw new Error('图片文件已被其他软件修改，已保留浏览器备份');
@@ -93,7 +82,6 @@ export async function syncImages(note) {
         try { await writable.write(asset.bytes); await writable.close(); } catch (error) { await writable.abort().catch(()=>{}); throw error; }
         current=await file.getFile();
       }
-    }
     synced.set(block.imageId,current.lastModified+':'+current.size);
   }
 }

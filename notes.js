@@ -122,7 +122,7 @@ function apply(next, force = false) {
     }else {drafts.delete(note.id);writing.delete(note.id);}
   }
   renderTree(); renderTabs(); renderBlocks(); renderStatus(); publishTarget();
-  $('#vault-label').textContent=state.vaultName || '本地草稿'; $('#vault-label').title=state.vaultName || '尚未选择电脑文件夹';
+  $('#vault-label').textContent=state.vaultName || '此浏览器'; $('#vault-label').title=state.vaultName || '笔记已自动保存在此浏览器，无需设置';
   for(const id of pending)pumpSave(id);
 }
 function compositionEnded(noteId=active){
@@ -393,15 +393,15 @@ function renderTabs() {
     tab.append(label, close); tabs.append(tab);
   }
   const note = noteFor(active); $('#welcome').hidden = !!note; $('#document').hidden = !note;
-  if (note) { $('#note-title').textContent = note.title; $('#breadcrumb').textContent = note.folder || state.vaultName || '本地草稿'; $('#rename').title='重命名或移动笔记：'+[note.folder,note.title].filter(Boolean).join('/'); }
+  if (note) { $('#note-title').textContent = note.title; $('#breadcrumb').textContent = note.folder || state.vaultName || '此浏览器'; $('#rename').title='重命名或移动笔记：'+[note.folder,note.title].filter(Boolean).join('/'); }
   tabs.scrollLeft=scrollLeft;
 }
 function renderStatus() {
   const note=noteFor(active),status=$('#save-status'),busy=writing.has(active);$('#export-note').disabled=!note;
   clearTimeout(statusTimer);
   if(busy){statusTimer=setTimeout(()=>{if(writing.has(active))status.textContent='正在保存…';},600);return;}
-  const text=!note?(state.vaultName?'笔记库 · '+state.vaultName:'关闭标签页后，笔记仍会保留'):note.synced?'已保存到电脑':'已保存本地备份 · 待写入文件夹';
-  status.textContent=text;status.title=busy?text:note?.syncError || text;status.classList.toggle('warning',!!note&&!note.synced&&!busy);
+  const text=!note?(state.vaultName?'笔记库 · '+state.vaultName:'关闭标签页后，笔记仍会保留'):!state.vaultName?'已保存到此浏览器':note.synced?'已保存到文件夹':'已保存到浏览器 · 文件夹待同步';
+  status.textContent=text;status.title=busy?text:note?.syncError || text;status.classList.toggle('warning',!!note&&!!state.vaultName&&!note.synced&&!busy);
   $('#count').textContent=note?visibleBlocks(note).filter(b=>b.type!=='empty').length+' 个框':'';
 }
 function openNote(id) {
@@ -603,9 +603,12 @@ $('#format-more summary').onclick = event => { event.preventDefault(); $('#forma
 const setup = () => api({type: 'OPEN_SETUP'}).catch(e => notice(e.message));
 $('#setup').onclick = $('#authorize').onclick = setup;
 $('#later').onclick = () => { $('#setup-card').hidden = true; chrome.storage.local.set({setupDismissed: true}); };
-function openSettings() { $('#auto-return').checked = state.autoReturn; for(const input of document.querySelectorAll('[data-type-color]'))input.value=(state.blockColors || defaults)[input.dataset.typeColor] || defaults[input.dataset.typeColor]; $('#folder-status').textContent = state.vaultName ? state.vaultName + (state.permission === 'granted' ? ' · 已连接' : (state.storageMode === 'native' ? ' · 文件组件未连接' : ' · 需要重新授权')) : '尚未设置电脑文件夹'; if (!$('#settings-dialog').open) { const r = $('#settings').getBoundingClientRect(); $('#settings-dialog').style.top = r.bottom + 4 + 'px'; $('#settings-dialog').show(); } }
+function openSettings() { $('#auto-return').checked = state.autoReturn; for(const input of document.querySelectorAll('[data-type-color]'))input.value=(state.blockColors || defaults)[input.dataset.typeColor] || defaults[input.dataset.typeColor]; for(const id of ['sync','refresh','disconnect-folder'])$('#'+id).hidden=!state.vaultName; $('#folder-status').textContent = state.vaultName ? state.vaultName + (state.permission === 'granted' ? ' · 已连接' : (' · 需要重新授权')) : '自动保存在此浏览器'; if (!$('#settings-dialog').open) { const r = $('#settings').getBoundingClientRect(); $('#settings-dialog').style.top = r.bottom + 4 + 'px'; $('#settings-dialog').show(); } }
 $('#settings').onclick = openSettings;
 hoverMenu($('#settings'), $('#settings-dialog'), openSettings, () => $('#settings-dialog').close());
+$('#disconnect-folder').onclick=async()=>{try{const r=await api({type:'DISCONNECT_FOLDER'});apply(r.state);openSettings();notice('已改为浏览器自动保存，原文件夹内容保留');}catch(e){notice(e.message);}};
+$('#import-backup').onclick=()=>$('#backup-file').click();
+$('#backup-file').onchange=async event=>{const input=event.target,file=input.files[0];if(!file)return;try{if(file.size>64*1024*1024)throw Error('备份文件不能超过 64 MB');const backup=JSON.parse(await file.text());const r=await api({type:'IMPORT_BACKUP',backup});apply(r.state);if(r.noteId)openNote(r.noteId);notice('已导入 '+r.importedCount+' 篇笔记，原笔记保留');}catch(e){notice('导入失败：'+e.message);}finally{input.value='';}};
 $('#settings-close').onclick = () => $('#settings-dialog').close();
 $('#auto-return').onchange = async () => { try { const result = await api({type: 'SETTINGS', autoReturn: $('#auto-return').checked}); apply(result.state); } catch (e) { notice(e.message); } };
 for (const [selector, type, success] of [['#sync', 'SYNC', '已完成保存重试，请查看笔记底部状态'], ['#refresh', 'REFRESH', '已读取文件夹更新；如有冲突，已保留副本']]) {
@@ -635,7 +638,7 @@ try {
   if (settings.pageTheme) document.documentElement.dataset.theme = settings.pageTheme;
   const saved = settings.panelState || {}; opened = saved.opened || []; active = saved.active || ''; selectedFolder = saved.selectedFolder || ''; expanded = new Set(saved.expanded || ['']);
   const result = await api({type: 'SCAN'}); apply(result.state);
-  $('#setup-card').hidden = !!state.vaultName || !!settings.setupDismissed;
+  $('#setup-card').hidden = true;
   if (noteFor(active)) openNote(active); else if (opened.length) openNote(opened[0]);
 } catch (e) { notice(e.message); $('#save-status').textContent = '笔记库打开失败'; }
 

@@ -1,5 +1,5 @@
-# Private source preservation snapshot
+# GPT阅读助手 1.6.0
 
-Updated 2026-10-16 to GPT阅读助手 1.5.3. Complete extension and native file component source are included. Existing archive Git history is retained. User notes, credentials, browser profiles, and caches are excluded. SOURCE_MANIFEST.json records SHA-256 for each source file.
+2026-10-18: standalone browser edition. Browser-local persistence is the default; optional directory access uses the browser's own file API. No Python or native messaging host is shipped or required. A distinct public extension identity preserves existing installations.
 
-This update fixes live answer outline refresh after SPA navigation and isolates outlines by browser tab and window. The local release passed 105 isolated checks; the current Chrome account page outline was also observed working.
+Git history through 1.5.3 is retained. No user notes, browser profiles, account information, private signing material or local runtime data are included. SOURCE_MANIFEST.json records the current source files.

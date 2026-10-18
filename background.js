@@ -1,19 +1,20 @@
 import {get, put, withSharedStore, sharedStatus, cacheRevision} from './db.js';
 import {mergeDocuments} from './collaboration.js';
 import {validName, notePath, samePath, uniqueTitle, documentText, parseDocument, jumpURL, plainPaste, quoteMarker, migrateNote, insertionPoint, noteBlocks, blockText, normalizeBlocks, DEFAULT_BLOCK_COLORS} from './core.js';
-import {rootHandle, nativeRequest} from './native-files.js';
+import {rootHandle} from './folder-files.js';
+import {prepareBackupImport} from './backup.js';
+import {putMany} from './db.js';
 import {handleHistoryMessage} from './history-index.js';
 import {storeImage, getImage, syncImages, backupAssets, validateImageBlocks, resetImageSync} from './media.js';
 
-const initial = () => ({notes: [], folders: [], vaultName: '', autoReturn: true, blockColors: {...DEFAULT_BLOCK_COLORS}});
+const initial = () => ({notes: [], folders: [], vaultName: '', storageMode: 'local', autoReturn: true, blockColors: {...DEFAULT_BLOCK_COLORS}});
 let queue = Promise.resolve();
 const serial = fn => { const next = queue.then(fn); queue = next.catch(() => {}); return next; };
 const load = async () => {
   const state = (await get('state')) || initial();
   let migrated = !state.blockColors || state.notes.some(n => !Array.isArray(n.blocks) || n.quoteLayout !== 'inline');
   state.blockColors = {...DEFAULT_BLOCK_COLORS, ...state.blockColors}; state.notes.forEach(migrateNote);
-  const shared = await sharedStatus();
-  if (shared && (state.storageMode !== 'native' || (shared.name && state.vaultName !== shared.name))) { state.storageMode = 'native'; if (shared.name) state.vaultName = shared.name; state.version = (state.version || 0) + 1; migrated = true; }
+  if (state.storageMode === 'native') { state.storageMode = 'local'; state.vaultName = ''; migrated = true; }
   if (migrated) await put('state', state);
   if (cachedAutoReturn !== state.autoReturn) { cachedAutoReturn = state.autoReturn; await chrome.storage.local.set({autoReturn:state.autoReturn}); }
   return state;
@@ -25,7 +26,7 @@ async function view(state) {
   const root = await rootHandle();
   const permission = root ? await root.queryPermission({mode: 'readwrite'}) : 'none';
   const {targets, ...publicState} = state;
-  return {...publicState, shared:!!(await sharedStatus()), permission, notes: state.notes.map(({diskText, retired, lastClient, lastSequence, clientSequences, quoteInsertions, imageInsertions, ...n}) => ({...n, synced: n.diskPath === notePath(n) && diskText === documentText(n) && !n.syncError}))};
+  return {...publicState, shared:false, savedLocally:true, permission, notes: state.notes.map(({diskText, retired, lastClient, lastSequence, clientSequences, quoteInsertions, imageInsertions, ...n}) => ({...n, synced: n.diskPath === notePath(n) && diskText === documentText(n) && !n.syncError}))};
 }
 async function fileAt(root, path, create = false) {
   const parts = path.split('/');
@@ -39,9 +40,9 @@ async function readAt(root, path) {
 }
 async function syncNote(state, note) {
   const root = await rootHandle();
-  if (!root) { note.syncError = '尚未设置文件夹；已保存在浏览器本地'; return; }
+  if (!root) { delete note.syncError; return; }
   try {
-    if (await root.queryPermission({mode: 'readwrite'}) !== 'granted') throw new Error(state.storageMode === 'native' ? '本地文件组件未连接；本地备份已保存' : '请重新授权文件夹；本地备份已保存');
+    if (await root.queryPermission({mode: 'readwrite'}) !== 'granted') throw new Error('文件夹需要重新授权；笔记已保存到此浏览器');
     const path = notePath(note);
     await syncImages(note);
     const content = documentText(note);
@@ -294,23 +295,22 @@ async function execute(message) {
         for (const note of state.notes) { delete note.diskPath; delete note.diskText; delete note.retired; }
       }
       await put('root', root); await put('pendingRoot', null);
-      await put('nativeMode', false); state.storageMode = 'browser';
+      state.storageMode = 'browser';
       state.vaultName = root.name;
       state.version = (state.version || 0) + 1; await persist(state);
       await importFiles(state, root);
       break;
     }
-    case 'CONNECT_NATIVE': {
-      resetImageSync();
-      const previous = await nativeRequest({op: 'STATUS'});
-      const selected = await nativeRequest({op: 'CHOOSE'});
-      if (state.storageMode !== 'native' || previous.path !== selected.path) {
-        for (const note of state.notes) { delete note.diskPath; delete note.diskText; delete note.retired; }
-      }
-      await put('nativeMode', true); await put('nativeName', selected.name);
-      state.storageMode = 'native'; state.vaultName = selected.name;
-      state.version = (state.version || 0) + 1; await persist(state);
-      await importFiles(state, await rootHandle()); break;
+    case 'DISCONNECT_FOLDER': {
+      await put('root', null); resetImageSync(); state.storageMode = 'local'; state.vaultName = '';
+      for (const note of state.notes) { delete note.diskPath; delete note.diskText; delete note.retired; delete note.syncError; }
+      break;
+    }
+    case 'IMPORT_BACKUP': {
+      const imported = prepareBackupImport(message.backup, state);
+      await putMany([['state', imported.state], ...imported.assets.map(a=>['asset:'+a.imageId,a])]);
+      notify();
+      return {state:await view(imported.state), importedCount:imported.count, noteId:imported.firstId};
     }
     case 'REFRESH': {
       const root = await rootHandle();
@@ -362,7 +362,7 @@ async function execute(message) {
   state.version = (state.version || 0) + 1;
   await persist(state);
   if (affected) await syncNote(state, affected);
-  if (['CONNECT', 'CONNECT_NATIVE', 'SYNC', 'REFRESH'].includes(message.type)) {
+  if (['CONNECT', 'SYNC', 'REFRESH'].includes(message.type)) {
     const root = await rootHandle();
     if (root && await root.queryPermission({mode: 'readwrite'}) === 'granted') {
       for (const path of state.folders) {
@@ -376,10 +376,10 @@ async function execute(message) {
   return {state: await view(state), noteId: affected?.id, insertion, ...imageResult, mergeConflicts, conflict: message.type === 'SAVE' && affected?.id !== message.id};
 }
 const transaction = message => withSharedStore(() => execute(message));
-chrome.sidePanel.setPanelBehavior({openPanelOnActionClick: false}).catch(console.error);
+
 async function openInline(tab,mode='notes') {
   await chrome.tabs.sendMessage(tab.id,{type:'OPEN_INLINE_NOTES',mode,windowId:tab.windowId,readerTabId:tab.id});
-  await chrome.sidePanel.close?.({windowId:tab.windowId}).catch(()=>{});
+
 }
 chrome.action.onClicked.addListener(tab=>{
   if(/^https:\/\/(chatgpt\.com|chat\.openai\.com)\//.test(tab.url || '')) {
@@ -494,8 +494,8 @@ chrome.runtime.onConnect.addListener(port => {
   });
   port.onDisconnect.addListener(() => { const panel = panels.get(port); panels.delete(port); if (panel) broadcastTarget(panel.windowId); });
 });
-chrome.sidePanel.onOpened?.addListener(info => { if (info.path === 'notes.html') { sidepanelOpen.set(info.windowId, true); broadcastTarget(info.windowId); } });
-chrome.sidePanel.onClosed?.addListener(info => { sidepanelOpen.set(info.windowId, false); broadcastTarget(info.windowId); });
+chrome.sidePanel?.onOpened?.addListener(info => { if (info.path === 'notes.html') { sidepanelOpen.set(info.windowId, true); broadcastTarget(info.windowId); } });
+chrome.sidePanel?.onClosed?.addListener(info => { sidepanelOpen.set(info.windowId, false); broadcastTarget(info.windowId); });
 chrome.tabs.onRemoved.addListener(tabId => { readers.delete(tabId);answerOutlines.delete(tabId);readerModes.delete(tabId);outlineRequests.delete(tabId);persistOutlines(); });
 chrome.tabs.onAttached.addListener((tabId,info)=>{
   if(readers.has(tabId))readers.get(tabId).windowId=info.newWindowId;
@@ -604,9 +604,6 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (message.type === 'OPEN_SETUP' && sender.url?.startsWith(chrome.runtime.getURL(''))) {
     chrome.tabs.create({url: chrome.runtime.getURL('setup.html')}).then(() => reply({ok: true})); return true;
   }
-  if (message.type === 'NATIVE_STATUS' && sender.url?.startsWith(chrome.runtime.getURL(''))) {
-    nativeRequest({op: 'STATUS'}).then(result => reply({ok: true, ...result})).catch(e => reply({error: e.message})); return true;
-  }
   if (message.type === 'ARM_IMAGE_DRAG' && sender.url?.startsWith(chrome.runtime.getURL('notes.html'))) {
     try {
       const windowId = sender.tab?.windowId ?? message.windowId;
@@ -647,7 +644,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     }).catch(error=>reply({error:error.message}));return true;
   }
   if(message.type==='VAULT_REVISION'){cacheRevision().then(result=>reply({ok:true,...result})).catch(error=>reply({error:error.message}));return true;}
-  if (!['LIST', 'CREATE', 'SAVE', 'RENAME', 'FOLDER', 'CONNECT', 'CONNECT_NATIVE', 'REFRESH', 'SCAN', 'SYNC', 'SETTINGS', 'REMOVE_QUOTE', 'UPDATE_QUOTE', 'STORE_IMAGE', 'GET_IMAGE', 'BACKUP'].includes(message.type)) return;
+  if (!['LIST', 'CREATE', 'SAVE', 'RENAME', 'FOLDER', 'CONNECT', 'DISCONNECT_FOLDER', 'IMPORT_BACKUP', 'REFRESH', 'SCAN', 'SYNC', 'SETTINGS', 'REMOVE_QUOTE', 'UPDATE_QUOTE', 'STORE_IMAGE', 'GET_IMAGE', 'BACKUP'].includes(message.type)) return;
   serial(() => transaction(message)).then(result => reply({ok: true, ...result})).catch(e => reply({error: e.message}));
   return true;
 });

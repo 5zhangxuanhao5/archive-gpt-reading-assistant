@@ -1,11 +1,26 @@
 {
-  "version": "1.5.3",
-  "date": "2026-10-16",
+  "version": "1.6.0",
+  "date": "2026-10-18",
   "files": [
     {
+      "path": ".gitignore",
+      "bytes": 76,
+      "sha256": "735bf7d3bce9a8164490192783dc3e44925bdfc06b82131cd32463fd1b8f8225"
+    },
+    {
+      "path": "ARCHIVE_INFO.md",
+      "bytes": 506,
+      "sha256": "bfc3d6012fb70ca8370433b20a06d584d1f583b42833af13253affe454e17e40"
+    },
+    {
       "path": "README.md",
-      "bytes": 16208,
-      "sha256": "2108328342b921795ba625ba1a040e2f291942f136c7734df0a31472aaacf472"
+      "bytes": 4839,
+      "sha256": "542be24d168b0810fccbdaf88f50f924559e2bc7b6c099bb8650930b4071bf4a"
+    },
+    {
+      "path": "RESTORE.md",
+      "bytes": 664,
+      "sha256": "b47bc0d32713597580435f5279784b8fb5ec2732e99fc7b598b721250a9a138f"
     },
     {
       "path": "THIRD_PARTY_NOTICES.txt",
@@ -19,8 +34,13 @@
     },
     {
       "path": "background.js",
-      "bytes": 46849,
-      "sha256": "546e13935b87c12264df250c2f4bacc33df50444abe5d0772fd863586594dcdf"
+      "bytes": 46175,
+      "sha256": "b14162de6b5f61ffbc13f67bddf2c49ae691507a38dfab205df447b780e1a2c4"
+    },
+    {
+      "path": "backup.js",
+      "bytes": 3289,
+      "sha256": "5792c4a3274c97f71f90b426a1ba8775c0d4a6663a4891d5fbea659a873ad3af"
     },
     {
       "path": "collaboration.js",
@@ -39,8 +59,8 @@
     },
     {
       "path": "db.js",
-      "bytes": 16431,
-      "sha256": "fb301f46602b4a6e6c0e7bc5ccb10a9906e449910303b6f3752ca373293f80d8"
+      "bytes": 1861,
+      "sha256": "8665165c2f32eba7e78f92242319eb586425b76cf70273e277be7659eedc9de0"
     },
     {
       "path": "development/build.mjs",
@@ -66,6 +86,11 @@
       "path": "drag-bridge.js",
       "bytes": 3915,
       "sha256": "45b8f0b71ba4f76f24e393949d7272e277d21fa29c51a6ec3f4a45a9320cfabd"
+    },
+    {
+      "path": "folder-files.js",
+      "bytes": 104,
+      "sha256": "67138a22afdd311906c5ee100707b18443d3d2d045d6be22d74e502b2aa6595f"
     },
     {
       "path": "history-index.js",
@@ -114,48 +139,18 @@
     },
     {
       "path": "manifest.json",
-      "bytes": 2225,
-      "sha256": "052b7559c28bf86a9fe1ca083a1650df93df7057dfc11c703e25d15053c6ff86"
+      "bytes": 2137,
+      "sha256": "4849de26350a12085ea4766c61d2ecb585fd63f15b4be3c77a7f172d219483d2"
     },
     {
       "path": "media.js",
-      "bytes": 6994,
-      "sha256": "756957ac5a053ab2795e68d388e2ee223c6dbd7b00487c5b46b762e901ec3fc2"
+      "bytes": 6350,
+      "sha256": "bd7dd3d781bac371eaad985e1dc844923aaefbd95f92bfd8c209972d6bde983d"
     },
     {
       "path": "message-dom.js",
       "bytes": 7305,
       "sha256": "60f5c77e133bd80d609a91bbd94764c14af114629033785a37730cc7fa3dcacf"
-    },
-    {
-      "path": "native/install.py",
-      "bytes": 1881,
-      "sha256": "1f27f0e96d851c6b04df238be4689a1b3ad0a39d5794796fb1c85e3da23e2348"
-    },
-    {
-      "path": "native/uninstall.py",
-      "bytes": 340,
-      "sha256": "ecfa3087d9ab0834c68fe819805e3e23b3d925cdc92b12d834df9f5e88a7d6e3"
-    },
-    {
-      "path": "native/yueji_host.py",
-      "bytes": 18017,
-      "sha256": "ce2f539be2195e832bb84ba0f9cb2db5901a3c6a0392bed4f75b8d8c9513f3fb"
-    },
-    {
-      "path": "native/安装本地文件组件.command",
-      "bytes": 226,
-      "sha256": "03f59f318e482127d25f0c1064480f78942c28bc86260076a10834ebf383bb5e"
-    },
-    {
-      "path": "native-files.js",
-      "bytes": 2568,
-      "sha256": "49c16be07fa593a5fa75bc6d2b0b48e0c9546d523d58b61326da4277426841ac"
-    },
-    {
-      "path": "native-transport.js",
-      "bytes": 1225,
-      "sha256": "55ff85045147c0466dedf73f2f4d0168359ccbf67144124b23136e3a95a27a4c"
     },
     {
       "path": "navigation.js",
@@ -169,13 +164,13 @@
     },
     {
       "path": "notes.html",
-      "bytes": 5889,
-      "sha256": "64d14eea4db814ef5f32f0d01533dc29cc52df460523c6b3a3371c32843faae4"
+      "bytes": 6245,
+      "sha256": "0e3e246be84cea5a675c822d55ba6ca153e0f6e4d408a9e14bc7dd60c2bd94ec"
     },
     {
       "path": "notes.js",
-      "bytes": 55486,
-      "sha256": "564c1460c8340cc784a134610bccb14040f8250aa6ae65c29c78e054cd7d6bde"
+      "bytes": 56300,
+      "sha256": "b53c98f03129e24be0c4ac167be324addd18f101753ce7ed36c6f0f08f2b750a"
     },
     {
       "path": "panel.js",
@@ -194,13 +189,18 @@
     },
     {
       "path": "setup.html",
-      "bytes": 1252,
-      "sha256": "a2a43a7b7dc4694f537964d5a6a8908a37ed03adb1f9ce696003a9187200c665"
+      "bytes": 1324,
+      "sha256": "4394107538a0805ab5f3aade6761feb47f64238dc193341a2ddbafa2b211d65d"
     },
     {
       "path": "setup.js",
-      "bytes": 2928,
-      "sha256": "f58c6c4212ad23509ddb78d00a5327d56a1b3c547fe51349022a2e7c6e0ade5a"
+      "bytes": 1428,
+      "sha256": "9450c303a4ab21eb5dc7763f7fe264c6152debad60dcd82015ee601184415155"
+    },
+    {
+      "path": "tests/standalone.e2e.cjs",
+      "bytes": 10218,
+      "sha256": "62ea7eb6ca50b3a3667aa2c6e6b534b7670ec7dc5cb25b0031b015229df564db"
     },
     {
       "path": "vendor/editor.js",
@@ -511,6 +511,11 @@
       "path": "vendor/katex.min.css",
       "bytes": 24793,
       "sha256": "d4ab5b8ee16989b070cdb0ea24bd6ad48fc8df1b787f280f29d3ae4f959f2c00"
+    },
+    {
+      "path": "verify-source.py",
+      "bytes": 1305,
+      "sha256": "51369ea7f5b4a638e5a3ec3106d00cd1de9c9a4b91f9bf3e1aa4c18c6eed3042"
     }
   ]
 }
